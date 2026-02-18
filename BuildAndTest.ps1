@@ -6,7 +6,15 @@ Param(
     [string]$Configuration = 'Development',
 
     [ValidateSet('Win64')]
-    [string]$Platform = 'Win64'
+    [string]$Platform = 'Win64',
+
+    [switch]$DisableNullRHI,
+
+    [switch]$DisableRenderOffscreen,
+
+    [switch]$DisableUnattended,
+
+    [switch]$DisableNoSound
 )
 
 $ErrorActionPreference = 'Stop'
@@ -179,15 +187,26 @@ try {
     $null = New-Item -ItemType Directory -Force -Path $reportExportPath
 
     $execCmds = "Automation RunTests $TestFilter; Quit"
-    $cmdArgs = @(
+    $cmdArgsParts = @(
         "`"$($buildResult.UProjectPath)`"",
         "-ExecCmds=`"$execCmds`"",
         "-ReportExportPath=`"$reportExportPath`"",
-        '-unattended',
         '-nop4',
-        '-nosplash',
-        '-nullrhi'
-    ) -join ' '
+        '-nosplash'
+    )
+    if (-not $DisableUnattended) {
+        $cmdArgsParts += '-unattended'
+    }
+    if (-not $DisableNoSound) {
+        $cmdArgsParts += '-nosound'
+    }
+    if (-not $DisableNullRHI) {
+        $cmdArgsParts += '-nullrhi'
+    }
+    elseif (-not $DisableRenderOffscreen) {
+        $cmdArgsParts += '-RenderOffscreen'
+    }
+    $cmdArgs = $cmdArgsParts -join ' '
 
     Write-Info "Tests started: $TestFilter"
     Write-Info "Engine: $($buildResult.EngineRoot)"
