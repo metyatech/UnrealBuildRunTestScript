@@ -21,7 +21,7 @@ $ErrorActionPreference = 'Stop'
 
 $commonScript = Join-Path $PSScriptRoot 'BuildCommon.ps1'
 if (-not (Test-Path -LiteralPath $commonScript)) {
-    Write-Host "[ERROR] BuildCommon.ps1 not found: $commonScript" -ForegroundColor Red
+    Write-Error "[ERROR] BuildCommon.ps1 not found: $commonScript" -ErrorAction Continue
     exit 1
 }
 . $commonScript
@@ -103,7 +103,7 @@ function Write-TestReportSummary {
             if ($null -eq $warningCount) {
                 $warningCount = 0
             }
-            Write-Host ("  - {0} (Warnings={1})" -f $name, $warningCount)
+            Write-Output ("  - {0} (Warnings={1})" -f $name, $warningCount)
 
             $warningEntry = $null
             if ($null -ne $test.entries) {
@@ -112,10 +112,10 @@ function Write-TestReportSummary {
             if ($null -ne $warningEntry -and $null -ne $warningEntry.event) {
                 $message = $warningEntry.event.message
                 if ($null -ne $warningEntry.filename -and $warningEntry.lineNumber -ge 0) {
-                    Write-Host ("    Warning: {0} ({1}:{2})" -f $message, $warningEntry.filename, $warningEntry.lineNumber)
+                    Write-Output ("    Warning: {0} ({1}:{2})" -f $message, $warningEntry.filename, $warningEntry.lineNumber)
                 }
                 else {
-                    Write-Host ("    Warning: {0}" -f $message)
+                    Write-Output ("    Warning: {0}" -f $message)
                 }
             }
         }
@@ -136,7 +136,7 @@ function Write-TestReportSummary {
         foreach ($test in $failedTests | Select-Object -First 20) {
             $name = Get-TestDisplayName -Test $test
             $state = $test.state
-            Write-Host ("  - {0} (State={1})" -f $name, $state)
+            Write-Output ("  - {0} (State={1})" -f $name, $state)
 
             $errorEntry = $null
             if ($null -ne $test.entries) {
@@ -145,10 +145,10 @@ function Write-TestReportSummary {
             if ($null -ne $errorEntry -and $null -ne $errorEntry.event) {
                 $message = $errorEntry.event.message
                 if ($null -ne $errorEntry.filename -and $errorEntry.lineNumber -ge 0) {
-                    Write-Host ("    Error: {0} ({1}:{2})" -f $message, $errorEntry.filename, $errorEntry.lineNumber)
+                    Write-Output ("    Error: {0} ({1}:{2})" -f $message, $errorEntry.filename, $errorEntry.lineNumber)
                 }
                 else {
-                    Write-Host ("    Error: {0}" -f $message)
+                    Write-Output ("    Error: {0}" -f $message)
                 }
             }
         }
@@ -164,7 +164,7 @@ try {
     }
 
     $engineResolverScript = Join-Path $PSScriptRoot 'Get-UEInstallPath.ps1'
-    $engineRootResolver = New-EngineRootResolverFromScript -ScriptPath $engineResolverScript
+    $engineRootResolver = Get-EngineRootResolverFromScript -ScriptPath $engineResolverScript
 
     $buildResult = Invoke-ProjectBuild `
         -ScriptRoot $PSScriptRoot `
@@ -178,7 +178,7 @@ try {
     }
 
     $editorCmd = Join-Path $buildResult.EngineRoot 'Engine\\Binaries\\Win64\\UnrealEditor-Cmd.exe'
-    Assert-PathExists -Path $editorCmd -Description 'UnrealEditor-Cmd.exe'
+    Assert-PathExistsOnDisk -Path $editorCmd -Description 'UnrealEditor-Cmd.exe'
 
     $projectRoot = Split-Path -Parent $buildResult.UProjectPath
     $reportRoot = Join-Path $projectRoot 'Saved\AutomationReports'

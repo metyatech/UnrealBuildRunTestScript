@@ -12,20 +12,21 @@ $ErrorActionPreference = 'Stop'
 
 $commonScript = Join-Path $PSScriptRoot 'BuildCommon.ps1'
 if (-not (Test-Path -LiteralPath $commonScript)) {
-    Write-Host "[ERROR] BuildCommon.ps1 not found: $commonScript" -ForegroundColor Red
+    Write-Error "[ERROR] BuildCommon.ps1 not found: $commonScript" -ErrorAction Continue
     exit 1
 }
 . $commonScript
 
 try {
     $engineResolverScript = Join-Path $PSScriptRoot 'Get-UEInstallPath.ps1'
-    $engineRootResolver = New-EngineRootResolverFromScript -ScriptPath $engineResolverScript
+    $engineRootResolver = Get-EngineRootResolverFromScript -ScriptPath $engineResolverScript
 
     $buildResult = Invoke-ProjectBuild `
         -ScriptRoot $PSScriptRoot `
         -Platform $Platform `
         -Configuration $Configuration `
-        -EngineRootResolver $engineRootResolver
+        -EngineRootResolver $engineRootResolver `
+        -UEVersionOverride $UEVersion
 
     if ($buildResult.ExitCode -ne 0) {
         Write-Err "Build failed. ExitCode=$($buildResult.ExitCode)"
@@ -33,7 +34,7 @@ try {
     }
 
     $editorExe = Join-Path $buildResult.EngineRoot 'Engine\\Binaries\\Win64\\UnrealEditor.exe'
-    Assert-PathExists -Path $editorExe -Description 'UnrealEditor.exe'
+    Assert-PathExistsOnDisk -Path $editorExe -Description 'UnrealEditor.exe'
 
     Write-Info 'Build succeeded. Launching Unreal Editor.'
     $editorArgs = '"' + $buildResult.UProjectPath + '"'

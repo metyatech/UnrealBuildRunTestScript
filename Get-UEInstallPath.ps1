@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Warn {
     param([string]$Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
+    Write-Warning "[WARN] $Message"
 }
 
 try {

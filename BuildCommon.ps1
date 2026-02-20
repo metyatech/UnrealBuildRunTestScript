@@ -1,16 +1,16 @@
 ﻿function Write-Info {
     param([string]$Message)
-    Write-Host "[INFO] $Message" -ForegroundColor Cyan
+    Write-Information "[INFO] $Message" -InformationAction Continue
 }
 
 function Write-Warn {
     param([string]$Message)
-    Write-Host "[WARN] $Message" -ForegroundColor Yellow
+    Write-Warning "[WARN] $Message"
 }
 
 function Write-Err {
     param([string]$Message)
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
+    Write-Error "[ERROR] $Message" -ErrorAction Continue
 }
 
 function Get-ProjectRoot {
@@ -53,7 +53,7 @@ function Get-UEVersionFromProject {
     return $uprojectJson.EngineAssociation
 }
 
-function New-EngineRootResolverFromScript {
+function Get-EngineRootResolverFromScript {
     param([string]$ScriptPath)
 
     if (-not (Test-Path -LiteralPath $ScriptPath)) {
@@ -86,7 +86,7 @@ function Get-EngineRoot {
     return $resolvedEngineRoot
 }
 
-function Assert-PathExists {
+function Assert-PathExistsOnDisk {
     param(
         [string]$Path,
         [string]$Description
@@ -97,7 +97,7 @@ function Assert-PathExists {
     }
 }
 
-function Get-EditorBuildArgs {
+function Get-EditorBuildCommandLine {
     param(
         [string]$ProjectName,
         [string]$Platform,
@@ -131,19 +131,23 @@ function Invoke-ProjectBuild {
         [string]$ScriptRoot,
         [string]$Platform,
         [string]$Configuration,
-        [ScriptBlock]$EngineRootResolver
+        [ScriptBlock]$EngineRootResolver,
+        [string]$UEVersionOverride
     )
 
     $projectRoot = Get-ProjectRoot -ScriptRoot $ScriptRoot
     $projectInfo = Get-ProjectInfo -ProjectRoot $projectRoot
 
-    $UEVersion = Get-UEVersionFromProject -UProjectPath $projectInfo.UProjectPath
+    $UEVersion = $UEVersionOverride
+    if ([string]::IsNullOrWhiteSpace($UEVersion)) {
+        $UEVersion = Get-UEVersionFromProject -UProjectPath $projectInfo.UProjectPath
+    }
     $engineRoot = Get-EngineRoot -UEVersion $UEVersion -EngineRootResolver $EngineRootResolver
 
     $buildBat = Join-Path $engineRoot 'Engine\\Build\\BatchFiles\\Build.bat'
-    Assert-PathExists -Path $buildBat -Description 'Build.bat'
+    Assert-PathExistsOnDisk -Path $buildBat -Description 'Build.bat'
 
-    $buildArgs = Get-EditorBuildArgs `
+    $buildArgs = Get-EditorBuildCommandLine `
         -ProjectName $projectInfo.ProjectName `
         -Platform $Platform `
         -Configuration $Configuration `
