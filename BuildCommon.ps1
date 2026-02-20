@@ -65,6 +65,13 @@ function Get-EngineRootResolverFromScript {
     return $resolver.GetNewClosure()
 }
 
+function New-EngineRootResolverFromScript {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Backward-compatible alias.')]
+    param([string]$ScriptPath)
+
+    return Get-EngineRootResolverFromScript -ScriptPath $ScriptPath
+}
+
 function Get-EngineRoot {
     param(
         [string]$UEVersion,
@@ -97,6 +104,16 @@ function Assert-PathExistsOnDisk {
     }
 }
 
+function Assert-PathExists {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Backward-compatible alias.')]
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    Assert-PathExistsOnDisk -Path $Path -Description $Description
+}
+
 function Get-EditorBuildCommandLine {
     param(
         [string]$ProjectName,
@@ -114,6 +131,22 @@ function Get-EditorBuildCommandLine {
         '-FromMsBuild',
         '-NoHotReload'
     ) -join ' '
+}
+
+function Get-EditorBuildArgs {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Justification = 'Backward-compatible alias.')]
+    param(
+        [string]$ProjectName,
+        [string]$Platform,
+        [string]$Configuration,
+        [string]$UProjectPath
+    )
+
+    return Get-EditorBuildCommandLine `
+        -ProjectName $ProjectName `
+        -Platform $Platform `
+        -Configuration $Configuration `
+        -UProjectPath $UProjectPath
 }
 
 function Invoke-EditorBuild {
