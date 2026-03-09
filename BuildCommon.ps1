@@ -128,7 +128,6 @@ function Get-EditorBuildCommandLine {
         $Configuration,
         "-Project=`"$UProjectPath`"",
         '-WaitMutex',
-        '-FromMsBuild',
         '-NoHotReload'
     ) -join ' '
 }
@@ -155,8 +154,27 @@ function Invoke-EditorBuild {
         [string]$BuildArgs
     )
 
-    $buildProc = Start-Process -FilePath $BuildBat -ArgumentList $BuildArgs -NoNewWindow -PassThru -Wait
-    return $buildProc.ExitCode
+    $MaxRetries = 10
+    $RetryCount = 0
+    $ExitCode = 0
+
+    while ($RetryCount -lt $MaxRetries) {
+        $buildProc = Start-Process -FilePath $BuildBat -ArgumentList $BuildArgs -NoNewWindow -PassThru -Wait
+        $ExitCode = $buildProc.ExitCode
+
+        # ExitCode 6 indicates a UBT Mutex conflict. Wait and retry non-destructively.
+        if ($ExitCode -eq 6) {
+            $RetryCount++
+            if ($RetryCount -lt $MaxRetries) {
+                Write-Warn "UBT Mutex conflict detected (ExitCode 6). Another instance may be running (e.g. CI). Retrying in 10 seconds ($RetryCount/$MaxRetries)..."
+                Start-Sleep -Seconds 10
+                continue
+            }
+        }
+        break
+    }
+
+    return $ExitCode
 }
 
 function Invoke-ProjectBuild {
