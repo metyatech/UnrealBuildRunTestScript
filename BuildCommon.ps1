@@ -3,11 +3,6 @@
     Write-Information "[INFO] $Message" -InformationAction Continue
 }
 
-function Write-Warn {
-    param([string]$Message)
-    Write-Warning "[WARN] $Message"
-}
-
 function Write-Err {
     param([string]$Message)
     Write-Error "[ERROR] $Message" -ErrorAction Continue
@@ -166,7 +161,7 @@ function Invoke-EditorBuild {
         if ($ExitCode -eq 6) {
             $RetryCount++
             if ($RetryCount -lt $MaxRetries) {
-                Write-Warn "UBT Mutex conflict detected (ExitCode 6). Another instance may be running (e.g. CI). Retrying in 10 seconds ($RetryCount/$MaxRetries)..."
+                Write-Warning "UBT Mutex conflict detected (ExitCode 6). Another instance may be running (e.g. CI). Retrying in 10 seconds ($RetryCount/$MaxRetries)..."
                 Start-Sleep -Seconds 10
                 continue
             }

@@ -5,11 +5,6 @@
 
 $ErrorActionPreference = 'Stop'
 
-function Write-Warn {
-    param([string]$Message)
-    Write-Warning "[WARN] $Message"
-}
-
 try {
     $appName = "UE_$Version"
     $manifestPath = 'C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests'
@@ -28,7 +23,7 @@ try {
             }
         }
         catch {
-            Write-Warn "Failed to parse manifest: $($file.Name) - $($_.Exception.Message)"
+            Write-Warning "Failed to parse manifest: $($file.Name) - $($_.Exception.Message)"
         }
     }
 

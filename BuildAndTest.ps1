@@ -96,7 +96,7 @@ function Write-TestReportSummary {
     }
 
     if ($warningTests.Count -gt 0) {
-        Write-Warn ("Succeeded with warnings ({0}):" -f $warningTests.Count)
+        Write-Warning("Succeeded with warnings ({0}):" -f $warningTests.Count)
         foreach ($test in $warningTests | Select-Object -First 20) {
             $name = Get-TestDisplayName -Test $test
             $warningCount = $test.warnings
@@ -120,7 +120,7 @@ function Write-TestReportSummary {
             }
         }
         if ($warningTests.Count -gt 20) {
-            Write-Warn ("More warnings exist. Showing first 20 of {0}." -f $warningTests.Count)
+            Write-Warning("More warnings exist. Showing first 20 of {0}." -f $warningTests.Count)
         }
     }
 
@@ -132,7 +132,7 @@ function Write-TestReportSummary {
     }
 
     if ($failedTests.Count -gt 0) {
-        Write-Warn ("Failed tests ({0}):" -f $failedTests.Count)
+        Write-Warning("Failed tests ({0}):" -f $failedTests.Count)
         foreach ($test in $failedTests | Select-Object -First 20) {
             $name = Get-TestDisplayName -Test $test
             $state = $test.state
@@ -153,7 +153,7 @@ function Write-TestReportSummary {
             }
         }
         if ($failedTests.Count -gt 20) {
-            Write-Warn ("More failures exist. Showing first 20 of {0}." -f $failedTests.Count)
+            Write-Warning("More failures exist. Showing first 20 of {0}." -f $failedTests.Count)
         }
     }
 }
@@ -226,11 +226,11 @@ try {
             Write-TestReportSummary -Report $report
         }
         catch {
-            Write-Warn "Failed to read test report: $indexJsonPath"
+            Write-Warning "Failed to read test report: $indexJsonPath"
         }
     }
     else {
-        Write-Warn "Test report not found: $indexJsonPath"
+        Write-Warning "Test report not found: $indexJsonPath"
     }
 
     if ($exitCode -ne 0) {
