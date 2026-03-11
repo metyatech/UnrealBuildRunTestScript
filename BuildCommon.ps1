@@ -109,6 +109,103 @@ function Assert-PathExists {
     Assert-PathExistsOnDisk -Path $Path -Description $Description
 }
 
+function Get-NormalizedCommandLineText {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return ''
+    }
+
+    return $Text.Replace('\', '/').ToLowerInvariant()
+}
+
+function Get-BlockingProjectEditorProcess {
+    param(
+        [object[]]$Processes,
+        [string]$ProjectName,
+        [string]$UProjectPath
+    )
+
+    if ($null -eq $Processes) {
+        return @()
+    }
+
+    $normalizedProjectPath = Get-NormalizedCommandLineText -Text ([System.IO.Path]::GetFullPath($UProjectPath))
+    $projectFileName = [System.IO.Path]::GetFileName($UProjectPath).ToLowerInvariant()
+    $projectIdentifier = "{0}.uproject" -f $ProjectName.ToLowerInvariant()
+
+    return ,@(
+        $Processes | Where-Object {
+            $processName = [string]$_.Name
+            if ($processName -notin @('UnrealEditor.exe', 'UnrealEditor-Cmd.exe')) {
+                return $false
+            }
+
+            $commandLine = Get-NormalizedCommandLineText -Text ([string]$_.CommandLine)
+            if ([string]::IsNullOrWhiteSpace($commandLine)) {
+                return $false
+            }
+
+            return $commandLine.Contains($normalizedProjectPath) -or $commandLine.Contains($projectFileName) -or
+                $commandLine.Contains($projectIdentifier)
+        }
+    )
+}
+
+function Wait-ForProjectEditorProcessesToExit {
+    param(
+        [string]$ProjectName,
+        [string]$UProjectPath,
+        [int]$TimeoutSeconds = 30,
+        [int]$PollIntervalSeconds = 2,
+        [ScriptBlock]$ProcessProvider,
+        [ScriptBlock]$SleepAction
+    )
+
+    if ($null -eq $ProcessProvider) {
+        $ProcessProvider = {
+            Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" |
+                Select-Object ProcessId, Name, CommandLine
+        }
+    }
+    if ($null -eq $SleepAction) {
+        $SleepAction = { param([int]$Seconds) Start-Sleep -Seconds $Seconds }
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ($true) {
+        $blocking = @(Get-BlockingProjectEditorProcess `
+                -Processes (& $ProcessProvider) `
+                -ProjectName $ProjectName `
+                -UProjectPath $UProjectPath)
+
+        if ($blocking.Count -eq 0) {
+            return
+        }
+
+        $summary = ($blocking | ForEach-Object { '{0}:{1}' -f $_.ProcessId, $_.Name }) -join ', '
+        if ((Get-Date) -ge $deadline) {
+            throw ("Timed out waiting for {0} editor process(es) to exit before build: {1}" -f $ProjectName, $summary)
+        }
+
+        Write-Warning ("Waiting for {0} editor process(es) to release project DLLs before build: {1}" -f
+                $ProjectName, $summary)
+        & $SleepAction -Seconds $PollIntervalSeconds
+    }
+}
+
+function Get-LiveProjectEditorProcess {
+    param(
+        [string]$ProjectName,
+        [string]$UProjectPath
+    )
+
+    $processes = Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" |
+        Select-Object ProcessId, Name, CommandLine
+
+    return @(Get-BlockingProjectEditorProcess -Processes $processes -ProjectName $ProjectName -UProjectPath $UProjectPath)
+}
+
 function Get-EditorBuildCommandLine {
     param(
         [string]$ProjectName,
@@ -146,10 +243,12 @@ function Get-EditorBuildArgs {
 function Invoke-EditorBuild {
     param(
         [string]$BuildBat,
-        [string]$BuildArgs
+        [string]$BuildArgs,
+        [string]$ProjectName,
+        [string]$UProjectPath
     )
 
-    $MaxRetries = 10
+    $MaxRetries = 2
     $RetryCount = 0
     $ExitCode = 0
 
@@ -157,13 +256,17 @@ function Invoke-EditorBuild {
         $buildProc = Start-Process -FilePath $BuildBat -ArgumentList $BuildArgs -NoNewWindow -PassThru -Wait
         $ExitCode = $buildProc.ExitCode
 
-        # ExitCode 6 indicates a UBT Mutex conflict. Wait and retry non-destructively.
         if ($ExitCode -eq 6) {
-            $RetryCount++
-            if ($RetryCount -lt $MaxRetries) {
-                Write-Warning "UBT Mutex conflict detected (ExitCode 6). Another instance may be running (e.g. CI). Retrying in 10 seconds ($RetryCount/$MaxRetries)..."
-                Start-Sleep -Seconds 10
-                continue
+            $blocking = @(Get-LiveProjectEditorProcess -ProjectName $ProjectName -UProjectPath $UProjectPath)
+            if ($blocking.Count -gt 0) {
+                $RetryCount++
+                if ($RetryCount -lt $MaxRetries) {
+                    $summary = ($blocking | ForEach-Object { '{0}:{1}' -f $_.ProcessId, $_.Name }) -join ', '
+                    Write-Warning ("Build returned ExitCode 6 while project editor process(es) were still alive. Retrying after wait: {0} ({1}/{2})" -f
+                            $summary, $RetryCount, $MaxRetries)
+                    Wait-ForProjectEditorProcessesToExit -ProjectName $ProjectName -UProjectPath $UProjectPath
+                    continue
+                }
             }
         }
         break
@@ -204,7 +307,15 @@ function Invoke-ProjectBuild {
     Write-Info "Engine: $engineRoot"
     Write-Info "Project: $($projectInfo.UProjectPath)"
 
-    $exitCode = Invoke-EditorBuild -BuildBat $buildBat -BuildArgs $buildArgs
+    Wait-ForProjectEditorProcessesToExit `
+        -ProjectName $projectInfo.ProjectName `
+        -UProjectPath $projectInfo.UProjectPath
+
+    $exitCode = Invoke-EditorBuild `
+        -BuildBat $buildBat `
+        -BuildArgs $buildArgs `
+        -ProjectName $projectInfo.ProjectName `
+        -UProjectPath $projectInfo.UProjectPath
 
     return [pscustomobject]@{
         ProjectName  = $projectInfo.ProjectName
