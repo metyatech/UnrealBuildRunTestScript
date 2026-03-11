@@ -8,6 +8,8 @@ function Write-Err {
     Write-Error "[ERROR] $Message" -ErrorAction Continue
 }
 
+. (Join-Path $PSScriptRoot 'UbtFailureClassification.ps1')
+
 function Get-ProjectRoot {
     param([string]$ScriptRoot)
     return (Resolve-Path (Join-Path $ScriptRoot '..')).Path
@@ -194,18 +196,6 @@ function Wait-ForProjectEditorProcessesToExit {
     }
 }
 
-function Get-LiveProjectEditorProcess {
-    param(
-        [string]$ProjectName,
-        [string]$UProjectPath
-    )
-
-    $processes = Get-CimInstance Win32_Process -Filter "Name = 'UnrealEditor.exe' OR Name = 'UnrealEditor-Cmd.exe'" |
-        Select-Object ProcessId, Name, CommandLine
-
-    return @(Get-BlockingProjectEditorProcess -Processes $processes -ProjectName $ProjectName -UProjectPath $UProjectPath)
-}
-
 function Get-EditorBuildCommandLine {
     param(
         [string]$ProjectName,
@@ -256,17 +246,13 @@ function Invoke-EditorBuild {
         $buildProc = Start-Process -FilePath $BuildBat -ArgumentList $BuildArgs -NoNewWindow -PassThru -Wait
         $ExitCode = $buildProc.ExitCode
 
-        if ($ExitCode -eq 6) {
-            $blocking = @(Get-LiveProjectEditorProcess -ProjectName $ProjectName -UProjectPath $UProjectPath)
-            if ($blocking.Count -gt 0) {
-                $RetryCount++
-                if ($RetryCount -lt $MaxRetries) {
-                    $summary = ($blocking | ForEach-Object { '{0}:{1}' -f $_.ProcessId, $_.Name }) -join ', '
-                    Write-Warning ("Build returned ExitCode 6 while project editor process(es) were still alive. Retrying after wait: {0} ({1}/{2})" -f
-                            $summary, $RetryCount, $MaxRetries)
-                    Wait-ForProjectEditorProcessesToExit -ProjectName $ProjectName -UProjectPath $UProjectPath
-                    continue
-                }
+        if (Test-IsConflictingUbtInstanceFailure -ExitCode $ExitCode) {
+            $RetryCount++
+            if ($RetryCount -lt $MaxRetries) {
+                Write-Warning ("Build for {0} ({1}) returned a UBT conflicting-instance failure. Retrying in 10 seconds ({2}/{3})..." -f
+                        $ProjectName, $UProjectPath, $RetryCount, $MaxRetries)
+                Start-Sleep -Seconds 10
+                continue
             }
         }
         break
