@@ -28,14 +28,35 @@ if (-not (Test-Path -LiteralPath $commonScript)) {
 
 function Get-SafeFolderName {
     param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return 'Tests'
+    }
+
     $invalidChars = [System.IO.Path]::GetInvalidFileNameChars()
     $safeName = $Name
     foreach ($char in $invalidChars) {
         $safeName = $safeName.Replace($char, '_')
     }
+
     if ([string]::IsNullOrWhiteSpace($safeName)) {
-        return 'Tests'
+        $safeName = 'Tests'
     }
+
+    if ($safeName.Length -gt 80) {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $hashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($safeName))
+            $hashText = [System.BitConverter]::ToString($hashBytes).Replace('-', '').Substring(0, 12).ToLowerInvariant()
+        }
+        finally {
+            $sha256.Dispose()
+        }
+
+        $prefixLength = [Math]::Min(60, $safeName.Length)
+        $safeName = '{0}-{1}' -f $safeName.Substring(0, $prefixLength), $hashText
+    }
+
     return $safeName
 }
 
