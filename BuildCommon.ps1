@@ -136,7 +136,7 @@ function Get-BlockingProjectEditorProcess {
     $projectFileName = [System.IO.Path]::GetFileName($UProjectPath).ToLowerInvariant()
     $projectIdentifier = "{0}.uproject" -f $ProjectName.ToLowerInvariant()
 
-    return ,@(
+    return @(
         $Processes | Where-Object {
             $processName = [string]$_.Name
             if ($processName -notin @('UnrealEditor.exe', 'UnrealEditor-Cmd.exe')) {
@@ -181,11 +181,47 @@ function Wait-ForProjectEditorProcessesToExit {
                 -ProjectName $ProjectName `
                 -UProjectPath $UProjectPath)
 
-        if ($blocking.Count -eq 0) {
+        $blockingSummary = @(
+            foreach ($process in $blocking) {
+                if ($null -eq $process) {
+                    continue
+                }
+
+                $processId = [string]$process.ProcessId
+                $processName = [string]$process.Name
+                $commandLine = [string]$process.CommandLine
+                if ([string]::IsNullOrWhiteSpace($processName) -and [string]::IsNullOrWhiteSpace($commandLine)) {
+                    continue
+                }
+
+                if ([string]::IsNullOrWhiteSpace($processId)) {
+                    if ([string]::IsNullOrWhiteSpace($processName)) {
+                        $commandPreview = $commandLine.Trim()
+                        if ($commandPreview.Length -gt 120) {
+                            $commandPreview = $commandPreview.Substring(0, 120)
+                        }
+                        $commandPreview
+                        continue
+                    }
+
+                    $processName
+                    continue
+                }
+
+                if ([string]::IsNullOrWhiteSpace($processName)) {
+                    $processId
+                    continue
+                }
+
+                '{0}:{1}' -f $processId, $processName
+            }
+        )
+
+        if ($blockingSummary.Count -eq 0) {
             return
         }
 
-        $summary = ($blocking | ForEach-Object { '{0}:{1}' -f $_.ProcessId, $_.Name }) -join ', '
+        $summary = $blockingSummary -join ', '
         if ((Get-Date) -ge $deadline) {
             throw ("Timed out waiting for {0} editor process(es) to exit before build: {1}" -f $ProjectName, $summary)
         }
