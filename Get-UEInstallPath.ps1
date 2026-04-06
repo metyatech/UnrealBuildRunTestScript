@@ -22,14 +22,15 @@ function Resolve-CiEngineRootOverride {
         [string]$Version
     )
 
-    $override = [Environment]::GetEnvironmentVariable('XROIDVERSE_CI_ENGINE_ROOT')
+    $overrideVariableName = 'UNREAL_VERIFY_CI_ENGINE_ROOT'
+    $override = [Environment]::GetEnvironmentVariable($overrideVariableName)
     if ([string]::IsNullOrWhiteSpace($override)) {
         return $null
     }
 
     $override = $override.Trim()
     if (-not (Test-Path -LiteralPath $override)) {
-        throw "CI engine root override from XROIDVERSE_CI_ENGINE_ROOT does not exist: $override"
+        throw "CI engine root override from $overrideVariableName does not exist: $override"
     }
 
     if (Test-UnrealEngineInstallRoot -Path $override) {
@@ -41,7 +42,7 @@ function Resolve-CiEngineRootOverride {
         return $versionedOverride
     }
 
-    throw "CI engine root override from XROIDVERSE_CI_ENGINE_ROOT does not contain an Unreal Engine install at '$override' or '$versionedOverride'"
+    throw "CI engine root override from $overrideVariableName does not contain an Unreal Engine install at '$override' or '$versionedOverride'"
 }
 
 try {

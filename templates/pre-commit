@@ -1,0 +1,82 @@
+#!/bin/sh
+
+set -eu
+
+SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
+if git rev-parse --show-toplevel >/dev/null 2>&1; then
+  REPO_ROOT="$(git rev-parse --show-toplevel)"
+else
+  REPO_ROOT="$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)"
+fi
+
+VERIFY_PS1="$REPO_ROOT/Verify.ps1"
+MARKDOWNLINT_CONFIG="$REPO_ROOT/.markdownlint.json"
+MARKDOWNLINT_IGNORE="$REPO_ROOT/.markdownlintignore"
+
+to_windows_path() {
+  _path="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$_path"
+  else
+    printf '%s\n' "$_path"
+  fi
+}
+
+if [ ! -f "$VERIFY_PS1" ]; then
+  echo "ERROR: Verify.ps1 not found at $VERIFY_PS1. Install the Unreal project verify toolkit before committing." >&2
+  exit 1
+fi
+
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -ExecutionPolicy Bypass -File "$(to_windows_path "$VERIFY_PS1")" -StaticAnalysisScope pr -BuildAndTestScope all || exit 1
+elif command -v powershell.exe >/dev/null 2>&1; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(to_windows_path "$VERIFY_PS1")" -StaticAnalysisScope pr -BuildAndTestScope all || exit 1
+else
+  echo "ERROR: Could not run Verify.ps1 because neither 'powershell.exe' nor 'pwsh' is available." >&2
+  exit 1
+fi
+
+if command -v markdownlint >/dev/null 2>&1; then
+  if [ -f "$MARKDOWNLINT_CONFIG" ] && [ -f "$MARKDOWNLINT_IGNORE" ]; then
+    if ! command -v mktemp >/dev/null 2>&1; then
+      echo "ERROR: Could not create a temporary file for markdownlint input because 'mktemp' is unavailable." >&2
+      exit 1
+    fi
+    _md_tmp=''
+    if ! _md_tmp=$(mktemp "pre-commit-mdlint.XXXXXX" 2>/dev/null); then
+      _tmpdir="${TMPDIR:-${TEMP:-/tmp}}"
+      if [ -d "$_tmpdir" ]; then
+        _md_tmp=$(mktemp "$_tmpdir/pre-commit-mdlint.XXXXXX") || {
+          echo "ERROR: Could not create a temporary file for markdownlint input." >&2
+          exit 1
+        }
+      else
+        echo "ERROR: Could not create a temporary file for markdownlint input." >&2
+        exit 1
+      fi
+    fi
+    trap 'rm -f "$_md_tmp"' EXIT HUP INT TERM
+    (
+      cd "$REPO_ROOT" && \
+      git ls-files -z -- '*.md'
+    ) > "$_md_tmp"
+    if [ -s "$_md_tmp" ]; then
+      (
+        cd "$REPO_ROOT" && \
+        xargs -0 sh -c '
+          _config=$1
+          _ignore=$2
+          shift 2
+          markdownlint --config "$_config" --ignore-path "$_ignore" -- "$@"
+        ' sh "$MARKDOWNLINT_CONFIG" "$MARKDOWNLINT_IGNORE" < "$_md_tmp"
+      ) || exit 1
+    fi
+    rm -f "$_md_tmp"
+    trap - EXIT HUP INT TERM
+  fi
+fi
+
+if command -v compose-agentsmd >/dev/null 2>&1; then
+  (cd "$REPO_ROOT" && compose-agentsmd --compose) || true
+  (cd "$REPO_ROOT" && git add AGENTS.md) || true
+fi
