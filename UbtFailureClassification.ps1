@@ -26,6 +26,16 @@ function Test-IsConflictingUbtInstanceMessage {
         $Text -match '(?im)Another instance of UAT .* is running'
 }
 
+function Test-IsUbtMutexAccessDeniedMessage {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $false
+    }
+
+    return $Text -match '(?im)UnauthorizedAccessException:\s*Access to the path [''"]Global\\UnrealBuildTool_Mutex[^''"]*[''"] is denied\.'
+}
+
 function Test-IsConflictingUbtInstanceFailure {
     param(
         [int]$ExitCode,
@@ -46,5 +56,6 @@ function Test-IsConflictingUbtInstanceFailure {
         $text = Get-UbtLogTail -LogPath $LogPath
     }
 
-    return Test-IsConflictingUbtInstanceMessage -Text $text
+    return (Test-IsConflictingUbtInstanceMessage -Text $text) -or
+        (Test-IsUbtMutexAccessDeniedMessage -Text $text)
 }

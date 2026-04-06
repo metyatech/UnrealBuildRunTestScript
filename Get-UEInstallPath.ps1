@@ -1,13 +1,35 @@
-﻿Param(
+Param(
     [Parameter(Mandatory = $true)]
-    [string]$Version
+    [string]$Version,
+
+    [string]$ManifestDirectory = 'C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests'
 )
 
 $ErrorActionPreference = 'Stop'
 
+function Resolve-CiEngineRootOverride {
+    $override = [Environment]::GetEnvironmentVariable('XROIDVERSE_CI_ENGINE_ROOT')
+    if ([string]::IsNullOrWhiteSpace($override)) {
+        return $null
+    }
+
+    $override = $override.Trim()
+    if (-not (Test-Path -LiteralPath $override)) {
+        throw "CI engine root override from XROIDVERSE_CI_ENGINE_ROOT does not exist: $override"
+    }
+
+    return $override
+}
+
 try {
+    $override = Resolve-CiEngineRootOverride
+    if (-not [string]::IsNullOrWhiteSpace($override)) {
+        Write-Output $override
+        return
+    }
+
     $appName = "UE_$Version"
-    $manifestPath = 'C:\ProgramData\Epic\EpicGamesLauncher\Data\Manifests'
+    $manifestPath = $ManifestDirectory
 
     if (-not (Test-Path -LiteralPath $manifestPath)) {
         throw "Manifest directory not found: $manifestPath"
