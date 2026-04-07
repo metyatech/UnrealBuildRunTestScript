@@ -480,7 +480,15 @@ try {
             $lintPaths.Add($resolvedLintPath)
         }
 
-        $results = Invoke-ScriptAnalyzer -Path $lintPaths.ToArray() -Recurse -Severity @('Warning', 'Error')
+        $results = [System.Collections.Generic.List[object]]::new()
+        foreach ($lintPath in $lintPaths) {
+            foreach ($result in @(Invoke-ScriptAnalyzer -Path $lintPath -Recurse -Severity @('Warning', 'Error'))) {
+                if ($null -ne $result) {
+                    $results.Add($result)
+                }
+            }
+        }
+
         if ($null -ne $results -and $results.Count -gt 0) {
             $results |
                 Select-Object RuleName, Severity, ScriptName, Line, Message |

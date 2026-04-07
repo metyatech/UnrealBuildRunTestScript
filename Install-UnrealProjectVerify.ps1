@@ -130,7 +130,17 @@ $relativeToolkitPath = Convert-ToRelativeRepoPath -RepoRoot $resolvedRepoRoot -P
 $relativeUProjectPath = Convert-ToRelativeRepoPath -RepoRoot $resolvedRepoRoot -Path $projectDescriptor.UProjectPath
 
 if ($PowerShellLintPaths.Count -eq 0) {
-    $PowerShellLintPaths = @('Verify.ps1', $relativeToolkitPath, 'tests')
+    $defaultLintPaths = [System.Collections.Generic.List[string]]::new()
+    $defaultLintPaths.Add('Verify.ps1')
+    $defaultLintPaths.Add($relativeToolkitPath)
+
+    foreach ($optionalPath in @('tests')) {
+        if (Test-Path -LiteralPath (Join-Path $resolvedRepoRoot $optionalPath)) {
+            $defaultLintPaths.Add($optionalPath)
+        }
+    }
+
+    $PowerShellLintPaths = @($defaultLintPaths)
 }
 
 $wrapperPath = Join-Path $resolvedRepoRoot 'Verify.ps1'

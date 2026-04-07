@@ -171,18 +171,20 @@ Invoke-TestCase -Name 'installer scaffolds verify wrapper, config, and hook' -Bo
         if ($configText -notmatch "DefaultTestFilter = 'SampleRepo'") {
             throw 'Expected generated config to derive DefaultTestFilter from the auto-detected project name.'
         }
+        if ($configText -match "'tests'") {
+            throw 'Expected generated config to omit the tests lint path when the target repository has no tests directory.'
+        }
 
         $verifyOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $verifyPath `
-            -SkipScriptLint `
             -SkipFormat `
             -SkipClangTidy `
             -SkipBuild `
             -SkipTests
         if ($LASTEXITCODE -ne 0) {
-            throw "Expected installed Verify.ps1 to succeed in all-skip mode, got ExitCode=$LASTEXITCODE"
+            throw "Expected installed Verify.ps1 to succeed with script lint enabled and Unreal phases skipped, got ExitCode=$LASTEXITCODE"
         }
         if (($verifyOutput -join [Environment]::NewLine) -notmatch 'VERIFY PASSED') {
-            throw 'Expected installed Verify.ps1 to report VERIFY PASSED in all-skip mode.'
+            throw 'Expected installed Verify.ps1 to report VERIFY PASSED with script lint enabled and Unreal phases skipped.'
         }
         if (($verifyOutput -join [Environment]::NewLine) -notmatch '\[INFO\] Project: SampleRepo') {
             throw 'Expected installed Verify.ps1 to auto-detect and log the project name from the repo-root .uproject.'
