@@ -2,7 +2,6 @@
 param(
     [string]$RepoRoot = (Get-Location).Path,
 
-    [Parameter(Mandatory = $true)]
     [string]$ProjectName,
 
     [string]$UProjectPath,
@@ -106,32 +105,29 @@ if ($LASTEXITCODE -ne 0) {
     throw "RepoRoot is not a git repository: $resolvedRepoRoot"
 }
 
-if ([string]::IsNullOrWhiteSpace($DefaultTestFilter)) {
-    $DefaultTestFilter = $ProjectName
-}
-
 $resolvedToolkitRoot = [System.IO.Path]::GetFullPath((Join-Path $resolvedRepoRoot $ToolkitRelativePath))
 $entryScript = Join-Path $resolvedToolkitRoot 'VerifyToolkit\Invoke-UnrealProjectVerify.ps1'
 if (-not (Test-Path -LiteralPath $entryScript)) {
     throw "Toolkit entry script not found. Expected a checked-out toolkit at: $entryScript"
 }
 
-if ([string]::IsNullOrWhiteSpace($UProjectPath)) {
-    $uprojectFiles = @(Get-ChildItem -LiteralPath $resolvedRepoRoot -Filter '*.uproject' -File -ErrorAction Stop)
-    if ($uprojectFiles.Count -ne 1) {
-        throw 'UProjectPath was not provided and auto-detection did not find exactly one .uproject file at the repo root.'
-    }
-    $resolvedUProjectPath = $uprojectFiles[0].FullName
+$verifyCommonPath = Join-Path $resolvedToolkitRoot 'VerifyToolkit\VerifyToolkit.Common.ps1'
+if (-not (Test-Path -LiteralPath $verifyCommonPath)) {
+    throw "Toolkit common script not found: $verifyCommonPath"
 }
-else {
-    $resolvedUProjectPath = [System.IO.Path]::GetFullPath((Join-Path $resolvedRepoRoot $UProjectPath))
-    if (-not (Test-Path -LiteralPath $resolvedUProjectPath)) {
-        throw "Configured UProjectPath does not exist: $resolvedUProjectPath"
-    }
+
+. $verifyCommonPath
+$projectDescriptor = Resolve-UnrealProjectDescriptor `
+    -RepoRoot $resolvedRepoRoot `
+    -ConfiguredPath $UProjectPath `
+    -ConfiguredProjectName $ProjectName
+
+if ([string]::IsNullOrWhiteSpace($DefaultTestFilter)) {
+    $DefaultTestFilter = $projectDescriptor.ProjectName
 }
 
 $relativeToolkitPath = Convert-ToRelativeRepoPath -RepoRoot $resolvedRepoRoot -Path $resolvedToolkitRoot
-$relativeUProjectPath = Convert-ToRelativeRepoPath -RepoRoot $resolvedRepoRoot -Path $resolvedUProjectPath
+$relativeUProjectPath = Convert-ToRelativeRepoPath -RepoRoot $resolvedRepoRoot -Path $projectDescriptor.UProjectPath
 
 if ($PowerShellLintPaths.Count -eq 0) {
     $PowerShellLintPaths = @('Verify.ps1', $relativeToolkitPath, 'tests')
@@ -204,29 +200,34 @@ foreach (`$entry in `$PSBoundParameters.GetEnumerator()) {
 exit `$LASTEXITCODE
 "@
 
-$configContent = @"
-@{
-    ProjectName = $(Convert-ToSingleQuotedPowerShellLiteral -Text $ProjectName)
-    UProjectPath = $(Convert-ToSingleQuotedPowerShellLiteral -Text $relativeUProjectPath)
-    DefaultTestFilter = $(Convert-ToSingleQuotedPowerShellLiteral -Text $DefaultTestFilter)
-    DefaultBranchRef = $(Convert-ToSingleQuotedPowerShellLiteral -Text $DefaultBranchRef)
-    StaticAnalysisPathspec = $(Format-PowerShellArrayLiteral -Values $StaticAnalysisPathspec -IndentWidth 8)
-    BuildImpactPatterns = @(
-        '*.uproject'
-        '*.uplugin'
-        '*.Build.cs'
-        '*.Target.cs'
-        'Source/*'
-        'Config/*'
-        'Plugins/*/Source/*'
-        'Plugins/*/Config/*'
-    )
-    AutomationSpecPatterns = $(Format-PowerShellArrayLiteral -Values $AutomationSpecPatterns -IndentWidth 8)
-    PowerShellLintPaths = $(Format-PowerShellArrayLiteral -Values $PowerShellLintPaths -IndentWidth 8)
-    RegressionTests = @()
-    ShellHookRegressionScript = ''
+$configLines = [System.Collections.Generic.List[string]]::new()
+$configLines.Add('@{')
+$configLines.Add('    # ProjectName / UProjectPath auto-detect from the single repo-root .uproject by default.')
+if (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
+    $configLines.Add("    ProjectName = $(Convert-ToSingleQuotedPowerShellLiteral -Text $ProjectName)")
 }
-"@
+if (-not [string]::IsNullOrWhiteSpace($UProjectPath)) {
+    $configLines.Add("    UProjectPath = $(Convert-ToSingleQuotedPowerShellLiteral -Text $relativeUProjectPath)")
+}
+$configLines.Add("    DefaultTestFilter = $(Convert-ToSingleQuotedPowerShellLiteral -Text $DefaultTestFilter)")
+$configLines.Add("    DefaultBranchRef = $(Convert-ToSingleQuotedPowerShellLiteral -Text $DefaultBranchRef)")
+$configLines.Add("    StaticAnalysisPathspec = $(Format-PowerShellArrayLiteral -Values $StaticAnalysisPathspec -IndentWidth 8)")
+$configLines.Add('    BuildImpactPatterns = @(')
+$configLines.Add("        '*.uproject'")
+$configLines.Add("        '*.uplugin'")
+$configLines.Add("        '*.Build.cs'")
+$configLines.Add("        '*.Target.cs'")
+$configLines.Add("        'Source/*'")
+$configLines.Add("        'Config/*'")
+$configLines.Add("        'Plugins/*/Source/*'")
+$configLines.Add("        'Plugins/*/Config/*'")
+$configLines.Add('    )')
+$configLines.Add("    AutomationSpecPatterns = $(Format-PowerShellArrayLiteral -Values $AutomationSpecPatterns -IndentWidth 8)")
+$configLines.Add("    PowerShellLintPaths = $(Format-PowerShellArrayLiteral -Values $PowerShellLintPaths -IndentWidth 8)")
+$configLines.Add('    RegressionTests = @()')
+$configLines.Add("    ShellHookRegressionScript = ''")
+$configLines.Add('}')
+$configContent = $configLines -join [Environment]::NewLine
 
 Write-Utf8NoBomFile -Path $wrapperPath -Content $wrapperContent -Force:$Force
 Write-Utf8NoBomFile -Path $configPath -Content $configContent -Force:$Force

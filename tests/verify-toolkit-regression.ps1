@@ -76,6 +76,58 @@ BEGIN_DEFINE_SPEC(FFooSpec, "MyProject.Gameplay.Foo", EAutomationTestFlags::Prod
     }
 }
 
+Invoke-TestCase -Name 'project descriptor auto-detects the single repo-root .uproject and derives the project name' -Body {
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("unreal-project-verify-descriptor-{0}" -f [Guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Force -Path $tempDir
+
+    try {
+        '@{}' | Set-Content -LiteralPath (Join-Path $tempDir 'AutoDetected.uproject') -Encoding ASCII
+
+        $descriptor = Resolve-UnrealProjectDescriptor -RepoRoot $tempDir
+        if ($descriptor.ProjectName -ne 'AutoDetected') {
+            throw "Expected auto-detected project name AutoDetected, got: $($descriptor.ProjectName)"
+        }
+        if ([System.IO.Path]::GetFileName($descriptor.UProjectPath) -ne 'AutoDetected.uproject') {
+            throw "Expected auto-detected .uproject path to end with AutoDetected.uproject, got: $($descriptor.UProjectPath)"
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempDir) {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force
+        }
+    }
+}
+
+Invoke-TestCase -Name 'project descriptor requires explicit UProjectPath when multiple repo-root .uproject files exist' -Body {
+    $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("unreal-project-verify-ambiguous-{0}" -f [Guid]::NewGuid().ToString('N'))
+    $null = New-Item -ItemType Directory -Force -Path $tempDir
+
+    try {
+        '@{}' | Set-Content -LiteralPath (Join-Path $tempDir 'First.uproject') -Encoding ASCII
+        '@{}' | Set-Content -LiteralPath (Join-Path $tempDir 'Second.uproject') -Encoding ASCII
+
+        $threw = $false
+        try {
+            $null = Resolve-UnrealProjectDescriptor -RepoRoot $tempDir
+        }
+        catch {
+            $threw = $true
+            if ($_.Exception.Message -notmatch 'Set UProjectPath explicitly') {
+                throw "Expected ambiguous project detection failure to require explicit UProjectPath, got: $($_.Exception.Message)"
+            }
+        }
+
+        if (-not $threw) {
+            throw 'Expected ambiguous repo-root .uproject detection to throw.'
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempDir) {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force
+        }
+    }
+}
+
 Invoke-TestCase -Name 'installer scaffolds verify wrapper, config, and hook' -Body {
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("unreal-project-verify-install-{0}" -f [Guid]::NewGuid().ToString('N'))
     $repoDir = Join-Path $tempDir 'SampleRepo'
@@ -94,8 +146,6 @@ Invoke-TestCase -Name 'installer scaffolds verify wrapper, config, and hook' -Bo
         $installScript = Join-Path $toolkitCopy 'Install-UnrealProjectVerify.ps1'
         & powershell -NoProfile -ExecutionPolicy Bypass -File $installScript `
             -RepoRoot $repoDir `
-            -ProjectName 'SampleRepo' `
-            -UProjectPath '.\SampleRepo.uproject' `
             -DefaultBranchRef 'origin/main'
         if ($LASTEXITCODE -ne 0) {
             throw "Install-UnrealProjectVerify.ps1 failed with ExitCode=$LASTEXITCODE"
@@ -112,11 +162,14 @@ Invoke-TestCase -Name 'installer scaffolds verify wrapper, config, and hook' -Bo
         }
 
         $configText = Get-Content -LiteralPath $configPath -Raw
-        if ($configText -notmatch "ProjectName = 'SampleRepo'") {
-            throw 'Expected generated config to include the project name.'
+        if ($configText -match "ProjectName\s*=") {
+            throw 'Expected generated config to omit ProjectName when auto-detection is sufficient.'
         }
-        if ($configText -notlike "*UProjectPath = 'SampleRepo.uproject'*") {
-            throw 'Expected generated config to store a repo-relative .uproject path.'
+        if ($configText -match "UProjectPath\s*=") {
+            throw 'Expected generated config to omit UProjectPath when auto-detection is sufficient.'
+        }
+        if ($configText -notmatch "DefaultTestFilter = 'SampleRepo'") {
+            throw 'Expected generated config to derive DefaultTestFilter from the auto-detected project name.'
         }
 
         $verifyOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $verifyPath `
@@ -130,6 +183,9 @@ Invoke-TestCase -Name 'installer scaffolds verify wrapper, config, and hook' -Bo
         }
         if (($verifyOutput -join [Environment]::NewLine) -notmatch 'VERIFY PASSED') {
             throw 'Expected installed Verify.ps1 to report VERIFY PASSED in all-skip mode.'
+        }
+        if (($verifyOutput -join [Environment]::NewLine) -notmatch '\[INFO\] Project: SampleRepo') {
+            throw 'Expected installed Verify.ps1 to auto-detect and log the project name from the repo-root .uproject.'
         }
 
         $hookPathConfig = (& git -C $repoDir config --get core.hooksPath).Trim()

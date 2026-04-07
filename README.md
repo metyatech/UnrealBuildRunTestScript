@@ -20,11 +20,7 @@ git submodule add https://github.com/metyatech/UnrealBuildRunTestScript.git Unre
 2. Run the installer from the target project root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\UnrealBuildRunTestScript\Install-UnrealProjectVerify.ps1 `
-  -ProjectName MyProject `
-  -UProjectPath .\MyProject.uproject `
-  -DefaultBranchRef origin/main `
-  -DefaultTestFilter MyProject
+powershell -NoProfile -ExecutionPolicy Bypass -File .\UnrealBuildRunTestScript\Install-UnrealProjectVerify.ps1
 ```
 
 3. Commit the generated files:
@@ -35,6 +31,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\UnrealBuildRunTestScript\I
 
 The installer also runs `git config core.hooksPath .githooks`, so the hook is
 active immediately in that repository.
+
+If the repository has exactly one `.uproject` at its root, the installer and
+shared verify entry point auto-detect both `ProjectName` and `UProjectPath`.
+Only set those fields explicitly when the project file is not at the repo root
+or when multiple root-level `.uproject` files exist.
 
 ## Generated files
 
@@ -47,8 +48,8 @@ point.
 
 Project-specific verify settings. The main fields are:
 
-- `ProjectName`: human-readable project label for logging
-- `UProjectPath`: repo-relative path to the `.uproject`
+- `ProjectName`: optional override for the human-readable project label
+- `UProjectPath`: optional repo-relative override for the `.uproject`
 - `DefaultTestFilter`: default automation test filter
 - `DefaultBranchRef`: default base ref for PR-style static analysis
 - `StaticAnalysisPathspec`: repo-relative roots scanned by clang-format /

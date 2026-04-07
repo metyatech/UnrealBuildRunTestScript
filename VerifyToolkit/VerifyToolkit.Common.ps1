@@ -197,6 +197,53 @@ function Resolve-AbsolutePathOnDisk {
     return [System.IO.Path]::GetFullPath($candidatePath)
 }
 
+function Resolve-UnrealProjectDescriptor {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot,
+
+        [string]$ConfiguredPath,
+
+        [string]$ConfiguredProjectName
+    )
+
+    $resolvedRepoRoot = Resolve-AbsolutePathOnDisk -Path $RepoRoot
+    if (-not (Test-Path -LiteralPath $resolvedRepoRoot -PathType Container)) {
+        throw "Repo root directory not found: $resolvedRepoRoot"
+    }
+
+    $resolvedUProjectPath = $null
+    if (-not [string]::IsNullOrWhiteSpace($ConfiguredPath)) {
+        $resolvedUProjectPath = Resolve-AbsolutePathOnDisk -Path $ConfiguredPath -BasePath $resolvedRepoRoot
+        if (-not (Test-Path -LiteralPath $resolvedUProjectPath -PathType Leaf)) {
+            throw "Configured .uproject not found: $resolvedUProjectPath"
+        }
+    }
+    else {
+        $projectFiles = @(Get-ChildItem -LiteralPath $resolvedRepoRoot -Filter '*.uproject' -File -ErrorAction Stop)
+        if ($projectFiles.Count -eq 1) {
+            $resolvedUProjectPath = $projectFiles[0].FullName
+        }
+        elseif ($projectFiles.Count -eq 0) {
+            throw "No .uproject file was found at repo root: $resolvedRepoRoot"
+        }
+        else {
+            $projectNames = @($projectFiles | ForEach-Object { $_.Name }) -join ', '
+            throw "Multiple .uproject files were found at repo root. Set UProjectPath explicitly in the verify config. Found: $projectNames"
+        }
+    }
+
+    $projectName = [string]$ConfiguredProjectName
+    if ([string]::IsNullOrWhiteSpace($projectName)) {
+        $projectName = [System.IO.Path]::GetFileNameWithoutExtension($resolvedUProjectPath)
+    }
+
+    return [pscustomobject]@{
+        ProjectName = $projectName
+        UProjectPath = $resolvedUProjectPath
+    }
+}
+
 function Get-TextSha256 {
     param(
         [Parameter(Mandatory = $true)]

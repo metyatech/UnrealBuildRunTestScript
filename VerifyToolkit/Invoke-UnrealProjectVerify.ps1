@@ -204,23 +204,38 @@ function Import-UnrealProjectVerifyConfig {
         throw "Verify config was empty: $resolvedPath"
     }
 
-    $projectName = [string]$rawConfig.ProjectName
-    if ([string]::IsNullOrWhiteSpace($projectName)) {
-        throw "Verify config must define ProjectName: $resolvedPath"
+    $isDictionary = $rawConfig -is [System.Collections.IDictionary]
+    function Get-OptionalConfigEntryValue {
+        param([string]$Name)
+
+        if ($isDictionary) {
+            if ($rawConfig.Contains($Name)) {
+                return $rawConfig[$Name]
+            }
+            return $null
+        }
+
+        $property = $rawConfig.PSObject.Properties[$Name]
+        if ($null -ne $property) {
+            return $property.Value
+        }
+
+        return $null
     }
 
-    $defaultTestFilter = [string]$rawConfig.DefaultTestFilter
-    if ([string]::IsNullOrWhiteSpace($defaultTestFilter)) {
+    $projectName = [string](Get-OptionalConfigEntryValue -Name 'ProjectName')
+    $defaultTestFilter = [string](Get-OptionalConfigEntryValue -Name 'DefaultTestFilter')
+    if ([string]::IsNullOrWhiteSpace($defaultTestFilter) -and -not [string]::IsNullOrWhiteSpace($projectName)) {
         $defaultTestFilter = $projectName
     }
 
-    $defaultBranchRef = [string]$rawConfig.DefaultBranchRef
+    $defaultBranchRef = [string](Get-OptionalConfigEntryValue -Name 'DefaultBranchRef')
     if ([string]::IsNullOrWhiteSpace($defaultBranchRef)) {
         $defaultBranchRef = 'origin/main'
     }
 
     $normalizedRegressionTests = [System.Collections.Generic.List[psobject]]::new()
-    foreach ($entry in @($rawConfig.RegressionTests)) {
+    foreach ($entry in @(Get-OptionalConfigEntryValue -Name 'RegressionTests')) {
         if ($null -eq $entry) {
             continue
         }
@@ -241,11 +256,11 @@ function Import-UnrealProjectVerifyConfig {
         ConfigPath = $resolvedPath
         RepoRoot = Split-Path $resolvedPath -Parent
         ProjectName = $projectName
-        UProjectPath = [string]$rawConfig.UProjectPath
+        UProjectPath = [string](Get-OptionalConfigEntryValue -Name 'UProjectPath')
         DefaultTestFilter = $defaultTestFilter
         DefaultBranchRef = $defaultBranchRef
-        StaticAnalysisPathspec = @(Get-ConfigStringArray -Value $rawConfig.StaticAnalysisPathspec -Default @('Source'))
-        BuildImpactPatterns = @(Get-ConfigStringArray -Value $rawConfig.BuildImpactPatterns -Default @(
+        StaticAnalysisPathspec = @(Get-ConfigStringArray -Value (Get-OptionalConfigEntryValue -Name 'StaticAnalysisPathspec') -Default @('Source'))
+        BuildImpactPatterns = @(Get-ConfigStringArray -Value (Get-OptionalConfigEntryValue -Name 'BuildImpactPatterns') -Default @(
                 '*.uproject',
                 '*.uplugin',
                 '*.Build.cs',
@@ -255,10 +270,10 @@ function Import-UnrealProjectVerifyConfig {
                 'Plugins/*/Source/*',
                 'Plugins/*/Config/*'
             ))
-        AutomationSpecPatterns = @(Get-ConfigStringArray -Value $rawConfig.AutomationSpecPatterns -Default @('Source/*Tests/Private/*.spec.cpp'))
-        PowerShellLintPaths = @(Get-ConfigStringArray -Value $rawConfig.PowerShellLintPaths -Default @('Verify.ps1', 'UnrealBuildRunTestScript', 'tests'))
+        AutomationSpecPatterns = @(Get-ConfigStringArray -Value (Get-OptionalConfigEntryValue -Name 'AutomationSpecPatterns') -Default @('Source/*Tests/Private/*.spec.cpp'))
+        PowerShellLintPaths = @(Get-ConfigStringArray -Value (Get-OptionalConfigEntryValue -Name 'PowerShellLintPaths') -Default @('Verify.ps1', 'UnrealBuildRunTestScript', 'tests'))
         RegressionTests = @($normalizedRegressionTests)
-        ShellHookRegressionScript = [string]$rawConfig.ShellHookRegressionScript
+        ShellHookRegressionScript = [string](Get-OptionalConfigEntryValue -Name 'ShellHookRegressionScript')
     }
 }
 
@@ -271,9 +286,21 @@ if (-not (Test-Path -LiteralPath $verifyCommonPath)) {
 $script:ToolkitRoot = Split-Path $PSScriptRoot -Parent
 $script:PowerShellExecutable = Resolve-PowerShellExecutable
 $verifyConfig = Import-UnrealProjectVerifyConfig -Path $ConfigPath
+$repoRoot = $verifyConfig.RepoRoot
+$projectDescriptor = Resolve-UnrealProjectDescriptor `
+    -RepoRoot $repoRoot `
+    -ConfiguredPath $verifyConfig.UProjectPath `
+    -ConfiguredProjectName $verifyConfig.ProjectName
+$projectName = $projectDescriptor.ProjectName
+$uprojectPath = $projectDescriptor.UProjectPath
 
 if (-not $PSBoundParameters.ContainsKey('TestFilter')) {
-    $TestFilter = $verifyConfig.DefaultTestFilter
+    $TestFilter = if ([string]::IsNullOrWhiteSpace($verifyConfig.DefaultTestFilter)) {
+        $projectName
+    }
+    else {
+        $verifyConfig.DefaultTestFilter
+    }
 }
 
 if (-not $PSBoundParameters.ContainsKey('ClangTidyBaseRef')) {
@@ -312,43 +339,6 @@ function Resolve-ToolPath {
     }
 
     throw "Required command not found: $Name (not on PATH, and not found under UE EngineRoot: $EngineRoot)"
-}
-
-function Get-RepoRoot {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$ConfigFilePath
-    )
-
-    return (Split-Path (Resolve-Path -LiteralPath $ConfigFilePath -ErrorAction Stop).Path -Parent)
-}
-
-function Get-UProjectPath {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoRoot,
-
-        [string]$ConfiguredPath
-    )
-
-    if (-not [string]::IsNullOrWhiteSpace($ConfiguredPath)) {
-        $uproject = Resolve-AbsolutePathOnDisk -Path $ConfiguredPath -BasePath $RepoRoot
-        if (-not (Test-Path -LiteralPath $uproject)) {
-            throw "Configured .uproject not found: $uproject"
-        }
-        return $uproject
-    }
-
-    $projectFiles = @(Get-ChildItem -LiteralPath $RepoRoot -Filter '*.uproject' -File -ErrorAction Stop)
-    if ($projectFiles.Count -eq 1) {
-        return $projectFiles[0].FullName
-    }
-    if ($projectFiles.Count -eq 0) {
-        throw "No .uproject file was found at repo root: $RepoRoot"
-    }
-
-    $projectNames = @($projectFiles | ForEach-Object { $_.Name }) -join ', '
-    throw "Multiple .uproject files were found at repo root. Set UProjectPath explicitly in the verify config. Found: $projectNames"
 }
 
 function Get-UEVersionFromProject([string]$UProjectPath) {
@@ -463,7 +453,6 @@ function Get-ChangedFormatFiles {
 try {
     Assert-CommandExists git
 
-    $repoRoot = Get-RepoRoot -ConfigFilePath $verifyConfig.ConfigPath
     Set-Location $repoRoot
     $userProvidedTestFilter = $PSBoundParameters.ContainsKey('TestFilter')
     $staticAnalysisPathspec = @($verifyConfig.StaticAnalysisPathspec)
@@ -472,7 +461,7 @@ try {
     }
 
     Write-Info "Repo: $repoRoot"
-    Write-Info "Project: $($verifyConfig.ProjectName)"
+    Write-Info "Project: $projectName"
 
     if (-not $SkipScriptLint) {
         Write-Info 'Running PowerShell lint (PSScriptAnalyzer) ...'
@@ -539,14 +528,12 @@ try {
         }
     }
 
-    $uprojectPath = $null
     $ueVersion = $null
     $engineRoot = $null
     $clangFormat = $null
     $clangTidy = $null
     $needsEngineTools = (-not $SkipBuild) -or (-not $SkipFormat) -or (-not $SkipClangTidy)
     if ($needsEngineTools) {
-        $uprojectPath = Get-UProjectPath -RepoRoot $repoRoot -ConfiguredPath $verifyConfig.UProjectPath
         $ueVersion = Get-UEVersionFromProject -UProjectPath $uprojectPath
         $engineRoot = Resolve-EngineRoot -UEVersion $ueVersion
 
