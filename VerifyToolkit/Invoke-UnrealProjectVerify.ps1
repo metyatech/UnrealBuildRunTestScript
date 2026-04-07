@@ -1,4 +1,7 @@
 [CmdletBinding()]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Assert-CommandExists', Justification = 'Internal helper keeps the imperative wording used by the verify entry point.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Get-ChangedCppFiles', Justification = 'Internal helper name keeps parity with the surrounding verify script terminology.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Get-ChangedFormatFiles', Justification = 'Internal helper name keeps parity with the surrounding verify script terminology.')]
 param(
     [Parameter(Mandatory = $true)]
     [string]$ConfigPath,
@@ -39,8 +42,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-function Write-Info([string]$Message) { Write-Host "[INFO] $Message" -ForegroundColor Cyan }
-function Write-Err([string]$Message) { Write-Host "[ERROR] $Message" -ForegroundColor Red }
+function Write-Info([string]$Message) { [Console]::Out.WriteLine("[INFO] $Message") }
+function Write-Err([string]$Message) { [Console]::Error.WriteLine("[ERROR] $Message") }
 
 function Assert-RegressionTestResultShape {
     param(
@@ -515,7 +518,7 @@ try {
 
             $shellHookTestEnvironment = Resolve-ShellHookTestEnvironment -AllowMissingShell:$AllowMissingHookTestShell
             if ($null -ne $shellHookTestEnvironment.ShPath) {
-                # Prepend Git's usr\bin to PATH so POSIX tools (dirname, grep, mktemp, …)
+                # Prepend Git's usr\bin to PATH so POSIX tools (dirname, grep, mktemp, ...)
                 # are available to sh.exe and any child processes it spawns.
                 $savedPath = $env:PATH
                 try {

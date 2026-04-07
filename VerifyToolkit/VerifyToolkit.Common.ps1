@@ -1,4 +1,21 @@
 [CmdletBinding()]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Scope = 'Function', Target = 'Remove-TemporaryFile', Justification = 'Internal cleanup helper is not exposed as a user-facing cmdlet.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Get-ClangDatabaseIncludeRules', Justification = 'Returns multiple include rules from multiple configured roots by design.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Scope = 'Function', Target = 'New-ProcessOutputCaptureState', Justification = 'Internal constructor-style helper only creates an in-memory state object.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Get-StartProcessParameters', Justification = 'Returns a parameter hashtable for Start-Process and keeps the existing helper name used by callers/tests.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Assert-NoNullArgumentListEntries', Justification = 'The helper validates multiple entries in an argument list by design.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Assert-NoNullProcessArguments', Justification = 'The helper validates multiple process arguments by design.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Get-LocalChangedRepositoryFiles', Justification = 'The helper intentionally returns multiple changed repository files.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Scope = 'Function', Target = 'Try-Resolve-StaticAnalysisPushRange', Justification = 'Try-Resolve conveys best-effort discovery semantics for this internal helper.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseApprovedVerbs', '', Scope = 'Function', Target = 'Try-Resolve-AutomationSpecFilterFromFile', Justification = 'Try-Resolve conveys best-effort discovery semantics for this internal helper.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWMICmdlet', '', Scope = 'Function', Target = 'Get-StaticAnalysisSystemProfile', Justification = 'Windows PowerShell 5.1 fallback keeps memory detection available when CIM cmdlets are unavailable.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Get-VerifyEngineSensitiveBuildDirectories', Justification = 'The helper intentionally returns multiple build directories.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Scope = 'Function', Target = 'Remove-DirectoryTreeIfExists', Justification = 'Internal cleanup helper is not exposed as a user-facing cmdlet.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Remove-DirectoryTreeIfExists', Justification = 'The helper removes an entire directory tree when needed.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Sync-VerifyEngineRootBuildArtifacts', Justification = 'The helper synchronizes multiple build artifacts tied to the active engine root.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Write-StaticAnalysisSuccessCacheEntries', Justification = 'The helper intentionally writes multiple cache entries.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Scope = 'Function', Target = 'Stop-ParallelProcessRecord', Justification = 'Internal cleanup helper is not exposed as a user-facing cmdlet.')]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseSingularNouns', '', Scope = 'Function', Target = 'Invoke-ParallelToolForFiles', Justification = 'The helper intentionally processes multiple files in parallel.')]
 param()
 
 $script:UnrealProjectVerifyTempPrefix = 'unreal-project-verify'
@@ -445,7 +462,7 @@ function Write-ProcessOutputFile {
 
     $reader = [System.IO.File]::OpenText($Path)
     try {
-        while (($line = $reader.ReadLine()) -ne $null) {
+        while ($null -ne ($line = $reader.ReadLine())) {
             if ($ToErrorStream) {
                 [Console]::Error.WriteLine($line)
             }
@@ -630,7 +647,7 @@ function Get-ProcessOutputFileExcerptInfo {
     try {
         $defaultEncoding = Get-RedirectedProcessOutputEncoding
         $reader = [System.IO.StreamReader]::new($stream, $defaultEncoding, $true)
-        while (($line = $reader.ReadLine()) -ne $null) {
+        while ($null -ne ($line = $reader.ReadLine())) {
             if ($EmitLines) {
                 if ($ToErrorStream) {
                     [Console]::Error.WriteLine($line)
@@ -1797,6 +1814,7 @@ function Get-StaticAnalysisSystemProfile {
             $operatingSystem = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop | Select-Object -First 1
         }
         catch {
+            Write-Verbose ("Get-CimInstance static-analysis profile fallback triggered: {0}" -f $_.Exception.Message)
         }
     }
 
@@ -1807,6 +1825,7 @@ function Get-StaticAnalysisSystemProfile {
             $operatingSystem = Get-WmiObject Win32_OperatingSystem -ErrorAction Stop | Select-Object -First 1
         }
         catch {
+            Write-Verbose ("Get-WmiObject static-analysis profile fallback failed: {0}" -f $_.Exception.Message)
         }
     }
 
@@ -1948,15 +1967,15 @@ function Resolve-StaticAnalysisConcurrencyPlan {
 
     if ($resolvedProcessorCount -le 0 -or
         ($null -eq $resolvedTotalPhysicalMemoryBytes -and $null -eq $resolvedFreePhysicalMemoryBytes)) {
-        $profile = Get-StaticAnalysisSystemProfile
+        $systemProfile = Get-StaticAnalysisSystemProfile
         if ($resolvedProcessorCount -le 0) {
-            $resolvedProcessorCount = $profile.ProcessorCount
+            $resolvedProcessorCount = $systemProfile.ProcessorCount
         }
         if ($null -eq $resolvedTotalPhysicalMemoryBytes) {
-            $resolvedTotalPhysicalMemoryBytes = $profile.TotalPhysicalMemoryBytes
+            $resolvedTotalPhysicalMemoryBytes = $systemProfile.TotalPhysicalMemoryBytes
         }
         if ($null -eq $resolvedFreePhysicalMemoryBytes) {
-            $resolvedFreePhysicalMemoryBytes = $profile.FreePhysicalMemoryBytes
+            $resolvedFreePhysicalMemoryBytes = $systemProfile.FreePhysicalMemoryBytes
         }
     }
 
@@ -2105,7 +2124,7 @@ function Get-VerifyCacheRoot {
     return $cacheRoot
 }
 
-function Normalize-VerifyEngineRootPath {
+function Resolve-VerifyEngineRootPath {
     param(
         [Parameter(Mandatory = $true)]
         [string]$EngineRoot
@@ -2249,7 +2268,7 @@ function Sync-VerifyEngineRootBuildArtifacts {
         [string]$EngineRoot
     )
 
-    $currentEngineRoot = Normalize-VerifyEngineRootPath -EngineRoot $EngineRoot
+    $currentEngineRoot = Resolve-VerifyEngineRootPath -EngineRoot $EngineRoot
     $currentEngineRootKey = $currentEngineRoot.ToLowerInvariant()
     $markerPath = Get-VerifyEngineRootMarkerPath -RepoRoot $RepoRoot
     $previousEngineRoot = $null
@@ -2259,7 +2278,7 @@ function Sync-VerifyEngineRootBuildArtifacts {
         $storedEngineRoot = [System.IO.File]::ReadAllText($markerPath, [System.Text.Encoding]::UTF8).Trim()
         if (-not [string]::IsNullOrWhiteSpace($storedEngineRoot)) {
             $previousEngineRoot = $storedEngineRoot
-            $previousEngineRootKey = (Normalize-VerifyEngineRootPath -EngineRoot $storedEngineRoot).ToLowerInvariant()
+            $previousEngineRootKey = (Resolve-VerifyEngineRootPath -EngineRoot $storedEngineRoot).ToLowerInvariant()
         }
     }
 
@@ -2530,8 +2549,8 @@ function Invoke-ParallelToolForFiles {
         -ToolKind $ToolKind `
         -FileCount $Files.Count
     $resolvedConcurrency = $concurrencyPlan.ResolvedConcurrency
-    Write-Host ("[INFO] {0} concurrency: {1}" -f $ProgressLabel,
-        (Format-StaticAnalysisConcurrencyPlan -Plan $concurrencyPlan)) -ForegroundColor Cyan
+    [Console]::Out.WriteLine(("[INFO] {0} concurrency: {1}" -f $ProgressLabel,
+            (Format-StaticAnalysisConcurrencyPlan -Plan $concurrencyPlan)))
     $pendingFiles = [System.Collections.Generic.Queue[string]]::new()
     foreach ($file in $Files) {
         $pendingFiles.Enqueue($file)
@@ -2567,8 +2586,8 @@ function Invoke-ParallelToolForFiles {
                         StderrPath = $stderrPath
                     })
 
-                Write-Host ("[INFO] {0} started [{1}/{2}] {3}" -f $ProgressLabel, ($completedCount + $activeRecords.Count),
-                    $totalCount, $file) -ForegroundColor Cyan
+                [Console]::Out.WriteLine(("[INFO] {0} started [{1}/{2}] {3}" -f $ProgressLabel,
+                        ($completedCount + $activeRecords.Count), $totalCount, $file))
             }
 
             $completedRecord = $null
@@ -2598,8 +2617,8 @@ function Invoke-ParallelToolForFiles {
                 throw "${FailureMessagePrefix}: $($completedRecord.File) (ExitCode=$exitCode)"
             }
 
-            Write-Host ("[INFO] {0} completed [{1}/{2}] {3}" -f $ProgressLabel, $completedCount, $totalCount,
-                $completedRecord.File) -ForegroundColor Cyan
+            [Console]::Out.WriteLine(("[INFO] {0} completed [{1}/{2}] {3}" -f $ProgressLabel,
+                    $completedCount, $totalCount, $completedRecord.File))
             Stop-ParallelProcessRecord -Record $completedRecord
         }
     }

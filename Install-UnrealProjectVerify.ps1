@@ -237,7 +237,7 @@ if ($LASTEXITCODE -ne 0) {
     throw 'Failed to configure git core.hooksPath to .githooks.'
 }
 
-Write-Host ("Installed Unreal project verify toolkit in {0}" -f $resolvedRepoRoot)
-Write-Host ("  Verify wrapper: {0}" -f $wrapperPath)
-Write-Host ("  Config: {0}" -f $configPath)
-Write-Host ("  Hook: {0}" -f $hookPath)
+[Console]::Out.WriteLine(("Installed Unreal project verify toolkit in {0}" -f $resolvedRepoRoot))
+[Console]::Out.WriteLine(("  Verify wrapper: {0}" -f $wrapperPath))
+[Console]::Out.WriteLine(("  Config: {0}" -f $configPath))
+[Console]::Out.WriteLine(("  Hook: {0}" -f $hookPath))

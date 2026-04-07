@@ -18,11 +18,11 @@ function Invoke-TestCase {
 
     try {
         & $Body
-        Write-Host "PASS $Name"
+        [Console]::Out.WriteLine("PASS $Name")
         $script:passed++
     }
     catch {
-        Write-Host "FAIL ${Name}: $($_.Exception.Message)"
+        [Console]::Out.WriteLine("FAIL ${Name}: $($_.Exception.Message)")
         $script:failed++
     }
 }
@@ -92,7 +92,7 @@ Invoke-TestCase -Name 'installer scaffolds verify wrapper, config, and hook' -Bo
         '@{}' | Set-Content -LiteralPath (Join-Path $repoDir 'SampleRepo.uproject') -Encoding ASCII
 
         $installScript = Join-Path $toolkitCopy 'Install-UnrealProjectVerify.ps1'
-        $installOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $installScript `
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $installScript `
             -RepoRoot $repoDir `
             -ProjectName 'SampleRepo' `
             -UProjectPath '.\SampleRepo.uproject' `
@@ -195,7 +195,7 @@ Invoke-TestCase -Name 'Get-UEInstallPath resolves a versioned install beneath th
     }
 }
 
-Write-Host "$passed passed, $failed failed"
+[Console]::Out.WriteLine("$passed passed, $failed failed")
 if ($failed -gt 0) {
     exit 1
 }
