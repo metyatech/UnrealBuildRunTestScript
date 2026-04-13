@@ -5,6 +5,8 @@ Reusable PowerShell toolkit for Unreal Engine projects on Windows.
 It provides:
 
 - build/run/test entry scripts for Unreal projects
+- repo-local build/run scripts that sync `Config/UBT/BuildConfiguration.xml`
+  into `Saved/UnrealBuildTool/BuildConfiguration.xml` before invoking UBT
 - a configurable `Verify.ps1` implementation for project-wide verification
 - an installer that scaffolds a repo-local verify wrapper, config, and
   pre-commit hook

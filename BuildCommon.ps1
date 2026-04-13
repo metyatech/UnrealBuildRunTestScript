@@ -111,6 +111,90 @@ function Assert-PathExists {
     Assert-PathExistsOnDisk -Path $Path -Description $Description
 }
 
+function Get-FileContentSha256 {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return [System.BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
+    }
+    finally {
+        $sha256.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Sync-FileIfDifferent {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourcePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DestinationPath
+    )
+
+    if (-not [System.IO.File]::Exists($SourcePath)) {
+        throw "Source file not found: $SourcePath"
+    }
+
+    $shouldCopy = -not [System.IO.File]::Exists($DestinationPath)
+    if (-not $shouldCopy) {
+        $sourceHash = Get-FileContentSha256 -Path $SourcePath
+        $destinationHash = Get-FileContentSha256 -Path $DestinationPath
+        $shouldCopy = $sourceHash -ne $destinationHash
+    }
+
+    if ($shouldCopy) {
+        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+    }
+
+    return $shouldCopy
+}
+
+function Resolve-BuildUbtConfigurationSourcePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectRoot
+    )
+
+    $configDir = Join-Path (Join-Path $ProjectRoot 'Config') 'UBT'
+    return Join-Path $configDir 'BuildConfiguration.xml'
+}
+
+function Sync-ProjectUbtBuildConfiguration {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectRoot
+    )
+
+    $srcUbtConfig = Resolve-BuildUbtConfigurationSourcePath -ProjectRoot $ProjectRoot
+    if (-not (Test-Path -LiteralPath $srcUbtConfig)) {
+        return $null
+    }
+
+    $destUbtDir = Join-Path (Join-Path $ProjectRoot 'Saved') 'UnrealBuildTool'
+    $null = New-Item -ItemType Directory -Force -Path $destUbtDir
+    $destUbtConfig = Join-Path $destUbtDir 'BuildConfiguration.xml'
+    $synced = Sync-FileIfDifferent -SourcePath $srcUbtConfig -DestinationPath $destUbtConfig
+
+    if ($synced) {
+        Write-Info 'UBT BuildConfiguration synced from Config\UBT\BuildConfiguration.xml'
+    }
+    else {
+        Write-Info 'UBT BuildConfiguration already current'
+    }
+
+    return [pscustomobject]@{
+        SourcePath      = $srcUbtConfig
+        DestinationPath = $destUbtConfig
+        Synced          = $synced
+    }
+}
+
 function Get-NormalizedCommandLineText {
     param([string]$Text)
 
@@ -557,6 +641,7 @@ function Invoke-ProjectBuild {
 
     $projectRoot = Get-ProjectRoot -ScriptRoot $ScriptRoot
     $projectInfo = Get-ProjectInfo -ProjectRoot $projectRoot
+    $null = Sync-ProjectUbtBuildConfiguration -ProjectRoot $projectRoot
 
     $UEVersion = $UEVersionOverride
     if ([string]::IsNullOrWhiteSpace($UEVersion)) {
